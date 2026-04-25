@@ -41,5 +41,10 @@ RC LsmTableEngine::get_record_scanner(RecordScanner *&scanner, Trx *trx, ReadWri
 
 RC LsmTableEngine::open()
 {
-  return RC::UNIMPLEMENTED;
+  if (lsm_ == nullptr) {
+    LOG_ERROR("lsm engine is null");
+    return RC::INTERNAL;
+  }
+  inc_id_.store(0);
+  return RC::SUCCESS;
 }

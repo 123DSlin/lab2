@@ -16,6 +16,7 @@ See the Mulan PSL v2 for more details. */
 
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <cstdlib>
 
 #include "common/lang/string.h"
 #include "common/log/log.h"
@@ -64,6 +65,12 @@ RC Db::init(const char *name, const char *dbpath, const char *trx_kit_name, cons
   }
 
   oceanbase::ObLsmOptions options;
+  if (const char *v = std::getenv("MINIOB_MEMTABLE_INTERNAL_MAX_CHILDREN"); v != nullptr && *v != '\0') {
+    options.memtable_internal_max_children = static_cast<size_t>(std::strtoull(v, nullptr, 10));
+  }
+  if (const char *v = std::getenv("MINIOB_MEMTABLE_LEAF_MAX_ENTRIES"); v != nullptr && *v != '\0') {
+    options.memtable_leaf_max_entries = static_cast<size_t>(std::strtoull(v, nullptr, 10));
+  }
   filesystem::path lsm_path = filesystem::path(dbpath) / "lsm";
   filesystem::create_directory(lsm_path);
 
