@@ -14,7 +14,7 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/string.h"
 #include "common/lang/string_view.h"
 #include "common/lang/memory.h"
-#include "oblsm/memtable/ob_skiplist.h"
+#include "oblsm/memtable/ob_memtable_bptree.h"
 #include "oblsm/util/ob_comparator.h"
 #include "oblsm/util/ob_arena.h"
 #include "oblsm/include/ob_lsm_iterator.h"
@@ -33,7 +33,13 @@ namespace oceanbase {
 class ObMemTable : public enable_shared_from_this<ObMemTable>
 {
 public:
-  ObMemTable() : comparator_(), table_(comparator_){};
+  explicit ObMemTable(size_t internal_max_children = 50, size_t leaf_max_entries = 50)
+  {
+    ObMemTableBPlusTree::Options opt;
+    opt.internal_max_children = internal_max_children;
+    opt.leaf_max_entries      = leaf_max_entries;
+    tree_.reset(new ObMemTableBPlusTree(opt));
+  }
 
   ~ObMemTable() = default;
 
@@ -84,45 +90,7 @@ public:
 
 private:
   friend class ObMemTableIterator;
-  /**
-   * @brief Compares two keys.
-   *
-   * Uses the internal comparator to perform lexicographical comparison between
-   * two keys.
-   *
-   * @param a Pointer to the first key.
-   * @param b Pointer to the second key.
-   * @return An integer indicating the result of the comparison:
-   *         - Negative value if `a < b`
-   *         - Zero if `a == b`
-   *         - Positive value if `a > b`
-   */
-  struct KeyComparator
-  {
-    const ObInternalKeyComparator comparator;
-    explicit KeyComparator() {}
-    int operator()(const char *a, const char *b) const;
-  };
-
-  // TODO: currently the memtable use skiplist as the underlying data structure,
-  // it is possible to use other data structure, for example, hash table.
-  typedef ObSkipList<const char *, KeyComparator> Table;
-
-  /**
-   * @brief Comparator used for ordering keys in the memtable.
-   *
-   * This member defines the rules for comparing keys in the skip list.
-   * TODO: support user-defined comparator
-   */
-  KeyComparator comparator_;
-
-  /**
-   * @brief The underlying data structure used for key-value storage.
-   *
-   * Currently implemented as a skip list. Future versions may support
-   * alternative data structures, such as hash tables.
-   */
-  Table table_;
+  unique_ptr<ObMemTableBPlusTree> tree_;
 
   /**
    * @brief Memory arena used for memory management in the memtable.
@@ -140,7 +108,7 @@ private:
 class ObMemTableIterator : public ObLsmIterator
 {
 public:
-  explicit ObMemTableIterator(shared_ptr<ObMemTable> mem, ObMemTable::Table *table) : mem_(mem), iter_(table) {}
+  explicit ObMemTableIterator(shared_ptr<ObMemTable> mem) : mem_(mem), iter_(mem->tree_.get()) {}
 
   ObMemTableIterator(const ObMemTableIterator &)            = delete;
   ObMemTableIterator &operator=(const ObMemTableIterator &) = delete;
@@ -157,9 +125,8 @@ public:
   string_view value() const override;
 
 private:
-  shared_ptr<ObMemTable>      mem_;
-  ObMemTable::Table::Iterator iter_;
-  string                      tmp_;  // For seek key
+  shared_ptr<ObMemTable>         mem_;
+  ObMemTableBPlusTree::Iterator  iter_;
 };
 
 }  // namespace oceanbase

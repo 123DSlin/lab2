@@ -28,6 +28,12 @@ struct ObLsmOptions
   // sstable size
   size_t table_size = 16 * 1024;
 
+  // MemTable ordered structure (Lab2): in-memory B+-tree parameters
+  // internal_max_children: max child pointers in an internal node
+  // leaf_max_entries: max entries in a leaf node
+  size_t memtable_internal_max_children = 50;
+  size_t memtable_leaf_max_entries      = 50;
+
   // leveled compaction
   size_t default_levels        = 7;
   size_t default_l1_level_size = 128 * 1024;

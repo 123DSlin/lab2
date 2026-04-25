@@ -41,31 +41,22 @@ void ObMemTable::put(uint64_t seq, const string_view &key, const string_view &va
   memcpy(p, &val_size, sizeof(size_t));
   p += sizeof(size_t);
   memcpy(p, value.data(), val_size);
-  table_.insert(buf);
+  tree_->insert(buf);
 }
 
-int ObMemTable::KeyComparator::operator()(const char *a, const char *b) const
-{
-  // Internal keys are encoded as length-prefixed strings.
-  string_view a_v = get_length_prefixed_string(a);
-  string_view b_v = get_length_prefixed_string(b);
-  return comparator.compare(a_v, b_v);
-}
+ObLsmIterator *ObMemTable::new_iterator() { return new ObMemTableIterator(get_shared_ptr()); }
 
-ObLsmIterator *ObMemTable::new_iterator() { return new ObMemTableIterator(get_shared_ptr(), &table_); }
-
-string_view ObMemTableIterator::key() const { return get_length_prefixed_string(iter_.key()); }
+string_view ObMemTableIterator::key() const { return get_length_prefixed_string(iter_.entry()); }
 
 string_view ObMemTableIterator::value() const
 {
-  string_view key_slice = get_length_prefixed_string(iter_.key());
+  string_view key_slice = get_length_prefixed_string(iter_.entry());
   return get_length_prefixed_string(key_slice.data() + key_slice.size());
 }
 
 void ObMemTableIterator::seek(const string_view &k)
 {
-  tmp_.clear();
-  iter_.seek(k.data());
+  iter_.seek(k);
 }
 
 }  // namespace oceanbase

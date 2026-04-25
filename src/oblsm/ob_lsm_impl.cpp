@@ -29,7 +29,7 @@ namespace oceanbase {
 ObLsmImpl::ObLsmImpl(const ObLsmOptions &options, const string &path)
     : options_(options), path_(path), mu_(), mem_table_(nullptr), imem_tables_(), manifest_(path)
 {
-  mem_table_ = make_shared<ObMemTable>();
+  mem_table_ = make_shared<ObMemTable>(options_.memtable_internal_max_children, options_.memtable_leaf_max_entries);
   sstables_  = make_shared<vector<vector<shared_ptr<ObSSTable>>>>();
   if (options_.type == CompactionType::LEVELED) {
     sstables_->resize(options_.default_levels);
@@ -156,7 +156,7 @@ RC ObLsmImpl::try_freeze_memtable()
 {
   RC rc = RC::SUCCESS;
   imem_tables_.emplace_back(mem_table_);
-  mem_table_ = make_unique<ObMemTable>();
+  mem_table_ = make_shared<ObMemTable>(options_.memtable_internal_max_children, options_.memtable_leaf_max_entries);
   // frozen previous wal
   if (!options_.force_sync_new_log) {
     rc = wal_->sync();
