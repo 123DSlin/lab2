@@ -182,7 +182,6 @@ CREATE TABLE sbtest%d(
                           sysbench.opt.table_size, table_num))
    end
 
-   -- query = "INSERT INTO sbtest" .. table_num .. "(k, f, c, pad) VALUES"
    query = "INSERT INTO sbtest" .. table_num .. " VALUES"
 
    -- con:bulk_insert_init(query)

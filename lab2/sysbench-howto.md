@@ -75,13 +75,41 @@ Lab 文档提示：MiniOB 可能无法正确执行 sysbench 的 cleanup（DROP T
 一种简单的保证“每次实验从干净库开始”的方式：
 
 1. 退出 `observer`
-2. 删除系统库目录（默认在 `build/miniob/db/sys`）
+2. 删除系统库目录
+
+> 注意：当前 `observer` 的默认 base_dir 是 `miniob`（见 `src/observer/common/init.cpp`），
+> 所以实际数据库文件目录是 `miniob/db/`，不是 `build/miniob/db/sys`。
 
 ```bash
-rm -rf build/miniob/db/sys
+rm -rf miniob/db
 ```
 
 然后重新启动 observer 并重新 prepare。
+
+也可以直接用一键脚本：
+
+```bash
+bash lab2/clean_db.sh 6789
+```
+
+---
+
+## 6. 一键跑 3×3 sysbench matrix（推荐）
+
+脚本会自动执行：
+
+- 10/10、50/50、100/100 三组参数
+- insert/select/delete 三个 workload
+- 每轮都先清库（`miniob/db`），并禁用二级索引（`--create_secondary=0`）
+
+直接运行：
+
+```bash
+chmod +x lab2/run_sysbench_matrix.sh
+bash lab2/run_sysbench_matrix.sh
+```
+
+输出在 `lab2/sysbench-results-*/summary.txt`。
 
 ---
 

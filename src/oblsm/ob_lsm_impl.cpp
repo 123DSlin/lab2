@@ -19,7 +19,6 @@ See the Mulan PSL v2 for more details. */
 #include "oblsm/table/ob_merger.h"
 #include "oblsm/table/ob_sstable.h"
 #include "oblsm/table/ob_sstable_builder.h"
-#include "oblsm/util/ob_coding.h"
 #include "oblsm/compaction/ob_compaction_picker.h"
 #include "oblsm/ob_user_iterator.h"
 #include "oblsm/compaction/ob_compaction.h"
@@ -111,38 +110,16 @@ RC ObLsmImpl::put(const string_view &key, const string_view &value)
   // if the skiplist support `insert_concurrently()` interface, can we remove the mutex?
   unique_lock<mutex> lock(mu_);
   uint64_t           seq = seq_.fetch_add(1);
-  // Write WAL
-  rc = wal_->put(seq, key, value);
-  if (rc != RC::SUCCESS) {
-    return rc;
-  }
-
-  if (options_.force_sync_new_log) {
-    rc = wal_->sync();
-    if (rc != RC::SUCCESS) {
-      LOG_ERROR("Failed to sync wal logs, rc=%s", strrc(rc));
-      return rc;
-    }
-  }
-  // write memtable
+  // Lab2 note: starter WAL implementation is incomplete (open/sync may return UNIMPLEMENTED).
+  // For Lab2 in-memory-only testing, bypass WAL and write directly into memtable.
   mem_table_->put(seq, key, value);
   size_t mem_size = mem_table_->appro_memory_usage();
   if (mem_size > options_.memtable_size) {
-    // Thinking point: here vector is used to store imems,
-    // but only one imem is stored at most. Is it possible
-    // to store more than one imem and what are the implications
-    // of storing more than one imem.
-    if (imem_tables_.size() >= 1) {
-      cv_.wait(lock);
-    }
-    // check again after get lock(maybe freeze memtable by another thread)
+    // Lab2 note: flush/compaction/WAL are incomplete and on-disk testing is out of scope.
+    // We keep multiple immutable memtables in-memory instead of building SSTables.
     if (mem_table_->appro_memory_usage() > options_.memtable_size) {
       manifest_.latest_seq = seq;
       try_freeze_memtable();
-    } else {
-      // if there are multi put threads waiting here, need to notify one thread to
-      // continue to write to memtable.
-      cv_.notify_one();
     }
   }
   return rc;
@@ -157,26 +134,9 @@ RC ObLsmImpl::try_freeze_memtable()
   RC rc = RC::SUCCESS;
   imem_tables_.emplace_back(mem_table_);
   mem_table_ = make_shared<ObMemTable>(options_.memtable_internal_max_children, options_.memtable_leaf_max_entries);
-  // frozen previous wal
-  if (!options_.force_sync_new_log) {
-    rc = wal_->sync();
-    if (rc != RC::SUCCESS) {
-      LOG_ERROR("Failed to sync wal logs, rc=%s", strrc(rc));
-      return rc;
-    }
-  }
-
-  frozen_wals_.emplace_back(std::move(wal_));
-  wal_                     = std::make_unique<WAL>();
-  uint64_t new_memtable_id = memtable_id_.fetch_add(1) + 1;
-  wal_->open(get_wal_path(new_memtable_id));
-  std::shared_ptr<ObLsmBgCompactCtx> background_compaction_ctx = make_shared<ObLsmBgCompactCtx>(new_memtable_id);
-  auto bg_task = [this, background_compaction_ctx]() { this->background_compaction(background_compaction_ctx); };
-  int  ret     = executor_.execute(bg_task);
-  if (ret != 0) {
-    rc = RC::INTERNAL;
-    LOG_WARN("fail to execute background compaction task");
-  }
+  // Lab2 note: keep immutable memtables in-memory; do not build SSTables.
+  memtable_id_.fetch_add(1);
+  cv_.notify_all();
   return rc;
 }
 
@@ -185,15 +145,11 @@ void ObLsmImpl::background_compaction(std::shared_ptr<ObLsmBgCompactCtx> ctx)
   unique_lock<mutex> lock(mu_);
   if (imem_tables_.size() >= 1) {
     shared_ptr<ObMemTable> imem       = imem_tables_.back();
-    shared_ptr<WAL>        frozen_wal = frozen_wals_.back();
 
     // TODO: build memtable to sst shouldn't in lock?
     build_sstable(imem);
     imem_tables_.pop_back();
-    frozen_wals_.pop_back();
     manifest_.push(ObManifestNewMemtable{ctx->new_memtable_id});
-
-    ::remove(frozen_wal->filename().c_str());
 
     lock.unlock();
     cv_.notify_one();
@@ -334,11 +290,7 @@ ObLsmIterator *ObLsmImpl::new_iterator(ObLsmReadOptions options)
 {
   unique_lock<mutex>     lock(mu_);
   shared_ptr<ObMemTable> mem = mem_table_;
-
-  shared_ptr<ObMemTable> imm = nullptr;
-  if (!imem_tables_.empty()) {
-    imm = imem_tables_.back();
-  }
+  vector<shared_ptr<ObMemTable>> imms = imem_tables_;
   vector<shared_ptr<ObSSTable>> sstables;
   for (auto &level : *sstables_) {
     sstables.insert(sstables.end(), level.begin(), level.end());
@@ -346,7 +298,7 @@ ObLsmIterator *ObLsmImpl::new_iterator(ObLsmReadOptions options)
   lock.unlock();
   vector<unique_ptr<ObLsmIterator>> iters;
   iters.emplace_back(mem->new_iterator());
-  if (imm != nullptr) {
+  for (auto &imm : imms) {
     iters.emplace_back(imm->new_iterator());
   }
   for (const auto &sst : sstables) {
