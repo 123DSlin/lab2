@@ -47,7 +47,16 @@ public:
     uint64_t height               = 1;  ///< root-only tree has height 1
   };
 
-  explicit ObMemTableBPlusTree(const Options &opt) : opt_(opt) {}
+  explicit ObMemTableBPlusTree(const Options &opt) : opt_(opt)
+  {
+    // Keep the fanout meaningful to avoid pathological split behavior.
+    if (opt_.internal_max_children < 3) {
+      opt_.internal_max_children = 3;
+    }
+    if (opt_.leaf_max_entries < 2) {
+      opt_.leaf_max_entries = 2;
+    }
+  }
   ~ObMemTableBPlusTree() = default;
 
   ObMemTableBPlusTree(const ObMemTableBPlusTree &)            = delete;

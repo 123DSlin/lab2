@@ -9,14 +9,10 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #include "storage/table/lsm_table_engine.h"
-#include "storage/record/heap_record_scanner.h"
 #include "common/log/log.h"
-#include "storage/index/bplus_tree_index.h"
-#include "storage/common/meta_util.h"
 #include "storage/db/db.h"
 #include "storage/record/lsm_record_scanner.h"
 #include "storage/common/codec.h"
-#include "storage/trx/lsm_mvcc_trx.h"
 
 RC LsmTableEngine::insert_record(Record &record)
 {
@@ -27,6 +23,22 @@ RC LsmTableEngine::insert_record(Record &record)
   Codec::encode(table_->table_id(), inc_id_.fetch_add(1), lsm_key);
   rc = lsm_->put(string_view((char *)lsm_key.data(), lsm_key.size()), string_view(record.data(), record.len()));
   return rc;
+}
+
+RC LsmTableEngine::delete_record(const Record &record)
+{
+  if (lsm_ == nullptr) {
+    LOG_ERROR("lsm engine is null");
+    return RC::INTERNAL;
+  }
+  // Deletion is represented as a tombstone: empty value.
+  // The RecordScanner for LSM sets Record::key() to the encoded LSM key.
+  const string &k = record.key();
+  if (k.empty()) {
+    LOG_WARN("lsm delete requires record key");
+    return RC::INVALID_ARGUMENT;
+  }
+  return lsm_->put(string_view(k.data(), k.size()), string_view());
 }
 
 RC LsmTableEngine::get_record_scanner(RecordScanner *&scanner, Trx *trx, ReadWriteMode mode)

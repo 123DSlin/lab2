@@ -1,0 +1,43 @@
+{
+	"fields" : 
+	[
+		{
+			"FIELD_id" : 0,
+			"len" : 4,
+			"name" : "k",
+			"offset" : 0,
+			"type" : "ints",
+			"visible" : true
+		},
+		{
+			"FIELD_id" : 1,
+			"len" : 4,
+			"name" : "f",
+			"offset" : 4,
+			"type" : "floats",
+			"visible" : true
+		},
+		{
+			"FIELD_id" : 2,
+			"len" : 120,
+			"name" : "c",
+			"offset" : 8,
+			"type" : "chars",
+			"visible" : true
+		},
+		{
+			"FIELD_id" : 3,
+			"len" : 60,
+			"name" : "pad",
+			"offset" : 128,
+			"type" : "chars",
+			"visible" : true
+		}
+	],
+	"indexes" : null,
+	"primary_keys" : null,
+	"storage_engine" : 1,
+	"storage_format" : 1,
+	"table_id" : 0,
+	"table_name" : "sbtest1"
+}

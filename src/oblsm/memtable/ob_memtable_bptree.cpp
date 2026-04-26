@@ -118,17 +118,13 @@ void ObMemTableBPlusTree::insert_into_parent(vector<Internal *> &path, Leaf *lef
   Internal *parent = path.back();
   path.pop_back();
 
-  // find index of left in parent's children
-  size_t left_index = 0;
-  for (; left_index < parent->children.size(); ++left_index) {
-    if (parent->children[left_index].get() == static_cast<Node *>(left)) {
-      break;
-    }
-  }
-  ASSERT(left_index < parent->children.size(), "left child must exist in parent");
-
-  parent->keys.insert(parent->keys.begin() + left_index, sep_entry);
-  parent->children.insert(parent->children.begin() + left_index + 1, std::move(right_child));
+  // Keep internal separator keys ordered by comparator.
+  const string_view sep_key = internal_key_from_entry(sep_entry);
+  auto it = std::lower_bound(parent->keys.begin(), parent->keys.end(), sep_key,
+      [this](const char *entry, const string_view &k) { return comparator_.compare(internal_key_from_entry(entry), k) < 0; });
+  const size_t key_pos = static_cast<size_t>(it - parent->keys.begin());
+  parent->keys.insert(it, sep_entry);
+  parent->children.insert(parent->children.begin() + key_pos + 1, std::move(right_child));
 
   if (parent->children.size() <= opt_.internal_max_children) {
     return;
@@ -180,17 +176,13 @@ void ObMemTableBPlusTree::split_internal_and_insert(
   Internal *parent = path.back();
   path.pop_back();
 
-  // find index of node in parent children
-  size_t idx = 0;
-  for (; idx < parent->children.size(); ++idx) {
-    if (parent->children[idx].get() == static_cast<Node *>(node)) {
-      break;
-    }
-  }
-  ASSERT(idx < parent->children.size(), "node must exist in parent");
-
-  parent->keys.insert(parent->keys.begin() + idx, promote);
-  parent->children.insert(parent->children.begin() + idx + 1, std::move(right));
+  // Keep internal separator keys ordered by comparator.
+  const string_view promote_key = internal_key_from_entry(promote);
+  auto it = std::lower_bound(parent->keys.begin(), parent->keys.end(), promote_key,
+      [this](const char *entry, const string_view &k) { return comparator_.compare(internal_key_from_entry(entry), k) < 0; });
+  const size_t key_pos = static_cast<size_t>(it - parent->keys.begin());
+  parent->keys.insert(it, promote);
+  parent->children.insert(parent->children.begin() + key_pos + 1, std::move(right));
 
   log_split();
 
